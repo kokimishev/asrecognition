@@ -137,3 +137,53 @@ class ASREngine():
             })
 
         return transcriptions
+
+    def transcribe_stream(self, audio) -> List[Dict]:
+        """
+        Transcribe the byte stream.
+        
+        Parameters
+        ----------
+        bytes : List[str] 
+            List of audio paths to transcribe.
+
+        Returns
+        -------
+        List[Dict]
+            A list of dictionaries containing the transcription for each audio file.
+            The format of each list element is:
+            {
+                "path": str,
+                "transcription": str
+            }
+        """
+
+
+        def _load_audio(audio):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                waveform, sampling_rate = librosa.load(io.BytesIO(audio), sr=16_000)
+                return waveform, sampling_rate;
+        
+        waveform, sampling_rate = _load_audio(audio);
+
+       
+
+        def _predict(waveform, sampling_rate, model=self.model, processor=self.processor, device=self.device):            
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                inputs = processor(waveform, sampling_rate=16_000, return_tensors="pt", padding=True)
+                with torch.no_grad():
+                    if hasattr(inputs, "attention_mask"):
+                        logits = model(inputs.input_values.to(device), attention_mask=inputs.attention_mask.to(device)).logits
+                    else:
+                        logits = model(inputs.input_values.to(device)).logits
+                pred_ids = torch.argmax(logits, dim=-1)
+                transcription = processor.batch_decode(pred_ids)
+                return transcription
+
+        
+        transcription = _predict(waveform,sampling_rate);
+        
+
+        return transcription
